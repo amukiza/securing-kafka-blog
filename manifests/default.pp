@@ -365,6 +365,45 @@ ssl.keystore.password=$password
 ssl.key.password=$password
 "
 } ->
+
+file { '/etc/schema-registry/sasl-schema-registry.properties':
+    ensure => present,
+    content => "
+listeners=http://0.0.0.0:8081
+kafkastore.connection.url=kafka.example.com:2181
+kafkastore.bootstrap.servers=SASL_PLAINTEXT://kafka.example.com:9091
+kafkastore.sasl.kerberos.service.name=kafka
+zookeeper.set.acl=true
+#kafkastore.ssl.truststore.location=/etc/kafka/secrets/kafkatruststore.jks
+#kafkastore.ssl.truststore.password=kafkatruststorepassword
+kafkastore.security.protocol=SASL_PLAINTEXT
+kafkastore.topic=_schemas
+debug=false
+## SCHEMA_REGISTRY_OPTS=-Djava.security.auth.login.config=kafka_client_jaas.conf
+"
+} ->
+
+file { '/etc/confluent-control-center/sasl-control-center.properties':
+ensure => present,
+content => "
+bootstrap.servers=kafka.example.com:9091
+zookeeper.connect=kafka.example.com:2181
+confluent.controlcenter.id=1
+confluent.controlcenter.data.dir=/tmp/confluent/control-center
+confluent.controlcenter.connect.cluster=localhost:8083
+confluent.controlcenter.internal.topics.replication=1
+confluent.controlcenter.internal.topics.partitions=2
+confluent.controlcenter.command.topic.replication=1
+confluent.monitoring.interceptor.topic.partitions=2
+confluent.monitoring.interceptor.topic.replication=1
+confluent.metrics.topic.replication=1
+zookeeper.set.acl=true
+## SASL options
+confluent.controlcenter.streams.sasl.mechanism=GSSAPI
+confluent.controlcenter.streams.security.protocol=SASL_PLAINTEXT
+#CONTROL_CENTER_OPTS=-Djava.security.auth.login.config=/tmp/kafka_client_jaas.conf
+"
+} ->
 class{'::motd':
   content => "Kerberos has been configured on this hosts.
 The KDC is configuring for testing and demo purposes only. Specifically, the master key is not

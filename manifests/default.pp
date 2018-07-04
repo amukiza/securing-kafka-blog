@@ -7,7 +7,7 @@
 # puppet module install saz-ssh
 
 $packages = [
-  'confluent-kafka-2.11',
+  'confluent-platform-2.11',
   'git',
   'java-1.8.0-openjdk-headless',
   'java-1.8.0-openjdk-devel',
@@ -28,7 +28,7 @@ $zookeeper_principal = "zookeeper/${fqdn}@${kerberos_realm}"
 $zookeeper_keytab = '/etc/security/keytabs/zookeeper.keytab'
 $kafka_principal = "kafka/${fqdn}@${kerberos_realm}"
 $kafka_keytab = '/etc/security/keytabs/kafka.keytab'
-$kafkaclient_principal = "kafkaclient/${fqdn}@${kerberos_realm}"
+$kafkaclient_principal = "kafkaclient@${kerberos_realm}"
 $kafkaclient_keytab = '/etc/security/keytabs/kafkaclient.keytab'
 
 $password="test1234"
@@ -65,16 +65,24 @@ define property_setting(
 package{'epel-release':
   ensure => 'installed'
 } ->
-service{'firewall':
+service {'firewall':
   ensure => 'stopped',
   enable => false
 }
-yumrepo{'confluent':
+
+yumrepo {'confluent.dist':
   ensure   => 'present',
-  descr    => 'Confluent repository for 3.0.x packages',
-  baseurl  => 'http://packages.confluent.io/rpm/3.0',
+  descr    => 'Confluent repository for 4.1.x packages',
+  baseurl  => 'https://packages.confluent.io/rpm/4.1/7',
   gpgcheck => 1,
-  gpgkey   => 'http://packages.confluent.io/rpm/3.0/archive.key',
+  gpgkey   => 'https://packages.confluent.io/rpm/4.1/archive.key',
+ } ->
+yumrepo {'confluent':
+  ensure => 'present',
+  descr    => 'Confluent repository for 4.1.x packages',
+  baseurl  => 'https://packages.confluent.io/rpm/4.1',
+  gpgcheck => 1,
+  gpgkey   => 'https://packages.confluent.io/rpm/4.1/archive.key',
 } ->
 package{$packages:
   ensure => 'installed'
@@ -176,11 +184,11 @@ exec{'create zookeeper keytab':
   command => "kadmin.local -q 'ktadd -k ${zookeeper_keytab} ${zookeeper_principal}'",
   creates => $zookeeper_keytab,
 } ->
-exec{'add kafkaclient principal':
+exec {'add kafkaclient principal':
   command => "kadmin.local -q 'addprinc -randkey ${kafkaclient_principal}'",
   unless  => "kadmin.local -q 'listprincs ${kafkaclient_principal}' | grep '${kafkaclient_principal}'",
 } ->
-exec{'create kafkaclient keytab':
+exec {'create kafkaclient keytab':
   command => "kadmin.local -q 'ktadd -k ${kafkaclient_keytab} ${kafkaclient_principal}'",
   creates => $kafkaclient_keytab,
 } ->
@@ -242,6 +250,7 @@ file{ '/etc/kafka/kafka_client_jaas.conf':
     com.sun.security.auth.module.Krb5LoginModule required
     useKeyTab=true
     storeKey=true
+    serviceName=\"kafka\"
     keyTab=\"${kafkaclient_keytab}\"
     principal=\"${kafkaclient_principal}\";
 };
@@ -262,7 +271,7 @@ file{'/etc/kafka/zookeeper_jaas.conf':
 file{$log_dir:
   ensure => directory
 } ->
-file{'/etc/kafka/zookeeper.properties':
+file {'/etc/kafka/krb-zookeeper.properties':
   ensure => present,
   content => "#Managed by puppet. Save changes to a different file.
 dataDir=/var/lib/zookeeper
@@ -277,17 +286,17 @@ file{'/usr/sbin/start-zk-and-kafka':
   mode    => '0755',
   content => "export KAFKA_HEAP_OPTS='-Xmx256M'
 export KAFKA_OPTS='-Djava.security.auth.login.config=/etc/kafka/zookeeper_jaas.conf'
-/usr/bin/zookeeper-server-start /etc/kafka/zookeeper.properties &
+/usr/bin/zookeeper-server-start /etc/kafka/krb-zookeeper.properties &
 sleep 5
 export KAFKA_OPTS='-Djava.security.auth.login.config=/etc/kafka/kafka_server_jaas.conf'
-/usr/bin/kafka-server-start /etc/kafka/server.properties &
+/usr/bin/kafka-server-start /etc/kafka/krb-server.properties &
 "
 } ->
-file{'/etc/kafka/server.properties':
+file{'/etc/kafka/krb-server.properties':
   ensure  => present,
   content => "#Managed by puppet. Save changes to a different file.
 broker.id=0
-listeners=SSL://:${ssl_port},SASL_SSL://:${sasl_port}
+listeners=SSL://:${ssl_port},SASL_SSL://:${sasl_port},SASL_PLAINTEXT://:9091
 security.inter.broker.protocol=SSL
 zookeeper.connect=${::fqdn}:2181
 log.dirs=$log_dir

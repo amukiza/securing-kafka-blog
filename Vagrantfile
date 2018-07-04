@@ -14,6 +14,9 @@ Vagrant.configure(2) do |config|
   # boxes at https://atlas.hashicorp.com/search.
   config.vm.box = "puppetlabs/centos-7.2-64-puppet"
   config.vm.hostname = 'kafka.example.com'
+  config.vm.network "private_network", ip: "192.168.50.4"
+  config.vm.synced_folder "consumer-producer/", "/home/vagrant/producer"
+
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
